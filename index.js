@@ -2,72 +2,81 @@ require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 
-/* ================== EXPRESS (Mini App) ================== */
+// ================== EXPRESS (Mini App) ==================
 const app = express();
 const PORT = process.env.PORT || 3000;
+
 app.use(express.static("public"));
+
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/public/index.html");
+});
 
 app.listen(PORT, () => {
   console.log("🌐 Mini App running on port " + PORT);
 });
 
-/* ================== TELEGRAM BOT ================== */
+// ================== TELEGRAM BOT ==================
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
-const MAIN_ADMIN = Number(process.env.ADMIN_ID);
-const ADMINS = [MAIN_ADMIN];
+// 👉 ОДИН ЧАТ ДЛЯ ВСЕХ АДМИНОВ
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 
+// ================== USER STATE ==================
 const users = {};
 
-/* ================== LANGUAGES ================== */
+// ================== LANGUAGES ==================
 const LANG = {
   ru: {
-    chooseLang: "🌐 Выберите язык",
-    hello: "👋 Я бот-менеджер ресторана. Чем могу помочь?",
+    chooseLang: "🌍 Выберите язык",
+    welcome: "👋 Я бот-менеджер ресторана. Чем могу помочь?",
     book: "📅 Забронировать",
     about: "ℹ️ О ресторане",
     delivery: "🚚 Доставка",
     back: "⬅️ Назад",
-    chooseFloor: "🏢 Выберите этаж",
-    chooseTable: "🍽 Выберите стол",
-    enterDate: "📅 Введите дату (например 12.06)",
-    enterName: "👤 Введите ваше имя",
-    enterPhone: "📞 Введите номер телефона",
-    done: "✅ Бронь отправлена менеджеру. Мы скоро свяжемся с вами."
+    floor: "🏢 Выберите этаж",
+    table: "🍽 Выберите стол",
+    date: "📅 Укажите дату брони",
+    name: "👤 Ваше имя",
+    phone: "📞 Номер телефона",
+    done: "✅ Заявка принята! Менеджер скоро свяжется с вами."
   },
   en: {
-    chooseLang: "🌐 Choose language",
-    hello: "👋 I am a restaurant manager bot. How can I help?",
+    chooseLang: "🌍 Choose language",
+    welcome: "👋 I am the restaurant manager bot. How can I help?",
     book: "📅 Reservation",
-    about: "ℹ️ About",
+    about: "ℹ️ About restaurant",
     delivery: "🚚 Delivery",
     back: "⬅️ Back",
-    chooseFloor: "🏢 Choose floor",
-    chooseTable: "🍽 Choose table",
-    enterDate: "📅 Enter date (e.g. 12.06)",
-    enterName: "👤 Enter your name",
-    enterPhone: "📞 Enter phone number",
-    done: "✅ Reservation sent. We will contact you soon."
+    floor: "🏢 Choose floor",
+    table: "🍽 Choose table",
+    date: "📅 Reservation date",
+    name: "👤 Your name",
+    phone: "📞 Phone number",
+    done: "✅ Request received! Manager will contact you."
   },
   uz: {
-    chooseLang: "🌐 Tilni tanlang",
-    hello: "👋 Men restoran menejer botiman. Qanday yordam beray?",
-    book: "📅 Band qilish",
+    chooseLang: "🌍 Tilni tanlang",
+    welcome: "👋 Men restoran menejer botiman. Qanday yordam beraman?",
+    book: "📅 Bron qilish",
     about: "ℹ️ Restoran haqida",
     delivery: "🚚 Yetkazib berish",
     back: "⬅️ Orqaga",
-    chooseFloor: "🏢 Qavatni tanlang",
-    chooseTable: "🍽 Stolni tanlang",
-    enterDate: "📅 Sana kiriting (12.06)",
-    enterName: "👤 Ismingizni kiriting",
-    enterPhone: "📞 Telefon raqam",
-    done: "✅ Buyurtma yuborildi. Tez orada bog‘lanamiz."
+    floor: "🏢 Qavatni tanlang",
+    table: "🍽 Stolni tanlang",
+    date: "📅 Sana",
+    name: "👤 Ismingiz",
+    phone: "📞 Telefon raqam",
+    done: "✅ So‘rov qabul qilindi! Menejer bog‘lanadi."
   }
 };
 
-/* ================== MENUS ================== */
-function langMenu() {
-  return {
+// ================== /START ==================
+bot.onText(/\/start/, (msg) => {
+  const chatId = msg.chat.id;
+  users[chatId] = {};
+
+  bot.sendMessage(chatId, LANG.ru.chooseLang, {
     reply_markup: {
       inline_keyboard: [
         [{ text: "🇷🇺 Русский", callback_data: "lang_ru" }],
@@ -75,47 +84,41 @@ function langMenu() {
         [{ text: "🇺🇿 O‘zbek", callback_data: "lang_uz" }]
       ]
     }
-  };
-}
-
-function mainMenu(lang) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: LANG[lang].book, callback_data: "book" }],
-        [{ text: LANG[lang].about, callback_data: "about" }],
-        [{ text: LANG[lang].delivery, web_app: { url: process.env.MINIAPP_URL || "" } }]
-      ]
-    }
-  };
-}
-
-/* ================== START ================== */
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, LANG.ru.chooseLang, langMenu());
+  });
 });
 
-/* ================== CALLBACKS ================== */
-bot.on("callback_query", async (q) => {
-  const chatId = q.message.chat.id;
-  const data = q.data;
+// ================== CALLBACKS ==================
+bot.on("callback_query", (query) => {
+  const chatId = query.message.chat.id;
+  const data = query.data;
 
+  // ===== Language select =====
   if (data.startsWith("lang_")) {
     const lang = data.split("_")[1];
     users[chatId] = { lang };
-    return bot.sendMessage(chatId, LANG[lang].hello, mainMenu(lang));
+
+    return bot.sendMessage(chatId, LANG[lang].welcome, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: LANG[lang].book, callback_data: "book" }],
+          [{ text: LANG[lang].delivery, web_app: { url: process.env.MINIAPP_URL } }],
+          [{ text: LANG[lang].about, callback_data: "about" }]
+        ]
+      }
+    });
   }
 
   const lang = users[chatId]?.lang || "ru";
 
+  // ===== Booking =====
   if (data === "book") {
     users[chatId].step = "floor";
-    return bot.sendMessage(chatId, LANG[lang].chooseFloor, {
+    return bot.sendMessage(chatId, LANG[lang].floor, {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "1️⃣ Этаж", callback_data: "floor_1" }],
-          [{ text: "2️⃣ Этаж", callback_data: "floor_2" }],
-          [{ text: LANG[lang].back, callback_data: "back_menu" }]
+          [{ text: "1️⃣ 1 этаж", callback_data: "floor_1" }],
+          [{ text: "2️⃣ 2 этаж", callback_data: "floor_2" }],
+          [{ text: LANG[lang].back, callback_data: "back_main" }]
         ]
       }
     });
@@ -134,61 +137,79 @@ bot.on("callback_query", async (q) => {
     }
     rows.push([{ text: LANG[lang].back, callback_data: "book" }]);
 
-    return bot.sendMessage(chatId, LANG[lang].chooseTable, {
+    return bot.sendMessage(chatId, LANG[lang].table, {
       reply_markup: { inline_keyboard: rows }
     });
   }
 
   if (data.startsWith("table_")) {
-    users[chatId].table = data.replace("table_", "");
+    users[chatId].table = data.split("_")[1];
     users[chatId].step = "date";
-    return bot.sendMessage(chatId, LANG[lang].enterDate, {
+    return bot.sendMessage(chatId, LANG[lang].date);
+  }
+
+  if (data === "about") {
+    return bot.sendMessage(
+      chatId,
+      "📍 OSIYO RESTO\n🕒 10:00 – 23:00\n📞 +998 XX XXX XX XX",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: LANG[lang].back, callback_data: "back_main" }]
+          ]
+        }
+      }
+    );
+  }
+
+  if (data === "back_main") {
+    return bot.sendMessage(chatId, LANG[lang].welcome, {
       reply_markup: {
-        inline_keyboard: [[{ text: LANG[lang].back, callback_data: "book" }]]
+        inline_keyboard: [
+          [{ text: LANG[lang].book, callback_data: "book" }],
+          [{ text: LANG[lang].delivery, web_app: { url: process.env.MINIAPP_URL } }],
+          [{ text: LANG[lang].about, callback_data: "about" }]
+        ]
       }
     });
   }
-
-  if (data === "back_menu") {
-    return bot.sendMessage(chatId, LANG[lang].hello, mainMenu(lang));
-  }
 });
 
-/* ================== TEXT STEPS ================== */
+// ================== TEXT STEPS ==================
 bot.on("message", (msg) => {
   const chatId = msg.chat.id;
-  const user = users[chatId];
-  if (!user || !user.step) return;
+  if (!users[chatId] || !users[chatId].step) return;
 
-  const lang = user.lang || "ru";
+  const lang = users[chatId].lang || "ru";
 
-  if (user.step === "date") {
-    user.date = msg.text;
-    user.step = "name";
-    return bot.sendMessage(chatId, LANG[lang].enterName);
+  if (users[chatId].step === "date") {
+    users[chatId].date = msg.text;
+    users[chatId].step = "name";
+    return bot.sendMessage(chatId, LANG[lang].name);
   }
 
-  if (user.step === "name") {
-    user.name = msg.text;
-    user.step = "phone";
-    return bot.sendMessage(chatId, LANG[lang].enterPhone);
+  if (users[chatId].step === "name") {
+    users[chatId].name = msg.text;
+    users[chatId].step = "phone";
+    return bot.sendMessage(chatId, LANG[lang].phone);
   }
 
-  if (user.step === "phone") {
-    user.phone = msg.text;
-    user.step = null;
+  if (users[chatId].step === "phone") {
+    users[chatId].phone = msg.text;
+    users[chatId].step = null;
 
-    const adminText =
+    const text =
 `📩 НОВАЯ БРОНЬ
-🏢 Этаж: ${user.floor}
-🍽 Стол: ${user.table}
-📅 Дата: ${user.date}
-👤 Имя: ${user.name}
-📞 Телефон: ${user.phone}`;
+🏢 Этаж: ${users[chatId].floor}
+🍽 Стол: ${users[chatId].table}
+📅 Дата: ${users[chatId].date}
+👤 Имя: ${users[chatId].name}
+📞 Телефон: ${users[chatId].phone}`;
 
-    ADMINS.forEach(id => bot.sendMessage(id, adminText));
+    // 👉 УВЕДОМЛЕНИЕ В ОБЩИЙ ЧАТ АДМИНОВ
+    bot.sendMessage(ADMIN_CHAT_ID, text);
 
-    return bot.sendMessage(chatId, LANG[lang].done, mainMenu(lang));
+    return bot.sendMessage(chatId, LANG[lang].done);
   }
 });
 
