@@ -1,15 +1,21 @@
-require("dotenv").config();
 const express = require("express");
 const path = require("path");
-
-require("./index"); // запускаем бота
+require("dotenv").config();
 
 const app = express();
-
-app.use(express.static(path.join(__dirname, "public")));
-
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log("🌐 Mini App server running on port", PORT);
+// 👉 Mini App
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/index.html"));
 });
+
+// 👉 Запуск сервера
+app.listen(PORT, () => {
+  console.log(`🌐 Mini App работает на порту ${PORT}`);
+});
+
+// 👉 Запуск бота
+require("./index");
