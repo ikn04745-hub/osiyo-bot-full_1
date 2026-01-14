@@ -1,216 +1,97 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
-const express = require("express");
 
-// ================== EXPRESS (Mini App) ==================
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(express.static("public"));
-
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/index.html");
-});
-
-app.listen(PORT, () => {
-  console.log("🌐 Mini App running on port " + PORT);
-});
-
-// ================== TELEGRAM BOT ==================
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
-// 👉 ОДИН ЧАТ ДЛЯ ВСЕХ АДМИНОВ
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 
-// ================== USER STATE ==================
-const users = {};
-
-// ================== LANGUAGES ==================
-const LANG = {
-  ru: {
-    chooseLang: "🌍 Выберите язык",
-    welcome: "👋 Я бот-менеджер ресторана. Чем могу помочь?",
-    book: "📅 Забронировать",
-    about: "ℹ️ О ресторане",
-    delivery: "🚚 Доставка",
-    back: "⬅️ Назад",
-    floor: "🏢 Выберите этаж",
-    table: "🍽 Выберите стол",
-    date: "📅 Укажите дату брони",
-    name: "👤 Ваше имя",
-    phone: "📞 Номер телефона",
-    done: "✅ Заявка принята! Менеджер скоро свяжется с вами."
-  },
-  en: {
-    chooseLang: "🌍 Choose language",
-    welcome: "👋 I am the restaurant manager bot. How can I help?",
-    book: "📅 Reservation",
-    about: "ℹ️ About restaurant",
-    delivery: "🚚 Delivery",
-    back: "⬅️ Back",
-    floor: "🏢 Choose floor",
-    table: "🍽 Choose table",
-    date: "📅 Reservation date",
-    name: "👤 Your name",
-    phone: "📞 Phone number",
-    done: "✅ Request received! Manager will contact you."
-  },
-  uz: {
-    chooseLang: "🌍 Tilni tanlang",
-    welcome: "👋 Men restoran menejer botiman. Qanday yordam beraman?",
-    book: "📅 Bron qilish",
-    about: "ℹ️ Restoran haqida",
-    delivery: "🚚 Yetkazib berish",
-    back: "⬅️ Orqaga",
-    floor: "🏢 Qavatni tanlang",
-    table: "🍽 Stolni tanlang",
-    date: "📅 Sana",
-    name: "👤 Ismingiz",
-    phone: "📞 Telefon raqam",
-    done: "✅ So‘rov qabul qilindi! Menejer bog‘lanadi."
-  }
-};
-
-// ================== /START ==================
+// ===== /start =====
 bot.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  users[chatId] = {};
-
-  bot.sendMessage(chatId, LANG.ru.chooseLang, {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🇷🇺 Русский", callback_data: "lang_ru" }],
-        [{ text: "🇬🇧 English", callback_data: "lang_en" }],
-        [{ text: "🇺🇿 O‘zbek", callback_data: "lang_uz" }]
-      ]
+  bot.sendMessage(
+    msg.chat.id,
+    "👋 Добро пожаловать!\n\nВыберите язык:",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🇷🇺 Русский", callback_data: "lang_ru" }],
+          [{ text: "🇺🇿 O‘zbekcha", callback_data: "lang_uz" }],
+          [{ text: "🇬🇧 English", callback_data: "lang_en" }],
+        ],
+      },
     }
-  });
+  );
 });
 
-// ================== CALLBACKS ==================
-bot.on("callback_query", (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data;
+// ===== язык =====
+bot.on("callback_query", (q) => {
+  const chatId = q.message.chat.id;
 
-  // ===== Language select =====
-  if (data.startsWith("lang_")) {
-    const lang = data.split("_")[1];
-    users[chatId] = { lang };
-
-    return bot.sendMessage(chatId, LANG[lang].welcome, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: LANG[lang].book, callback_data: "book" }],
-          [{ text: LANG[lang].delivery, web_app: { url: process.env.MINIAPP_URL } }],
-          [{ text: LANG[lang].about, callback_data: "about" }]
-        ]
-      }
-    });
-  }
-
-  const lang = users[chatId]?.lang || "ru";
-
-  // ===== Booking =====
-  if (data === "book") {
-    users[chatId].step = "floor";
-    return bot.sendMessage(chatId, LANG[lang].floor, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "1️⃣ 1 этаж", callback_data: "floor_1" }],
-          [{ text: "2️⃣ 2 этаж", callback_data: "floor_2" }],
-          [{ text: LANG[lang].back, callback_data: "back_main" }]
-        ]
-      }
-    });
-  }
-
-  if (data.startsWith("floor_")) {
-    users[chatId].floor = data.split("_")[1];
-    users[chatId].step = "table";
-
-    const rows = [];
-    for (let i = 1; i <= 10; i += 2) {
-      rows.push([
-        { text: `🍽 ${i}`, callback_data: `table_${i}` },
-        { text: `🍽 ${i + 1}`, callback_data: `table_${i + 1}` }
-      ]);
-    }
-    rows.push([{ text: LANG[lang].back, callback_data: "book" }]);
-
-    return bot.sendMessage(chatId, LANG[lang].table, {
-      reply_markup: { inline_keyboard: rows }
-    });
-  }
-
-  if (data.startsWith("table_")) {
-    users[chatId].table = data.split("_")[1];
-    users[chatId].step = "date";
-    return bot.sendMessage(chatId, LANG[lang].date);
-  }
-
-  if (data === "about") {
-    return bot.sendMessage(
+  if (q.data.startsWith("lang_")) {
+    bot.sendMessage(
       chatId,
-      "📍 OSIYO RESTO\n🕒 10:00 – 23:00\n📞 +998 XX XXX XX XX",
+      "🤖 Я менеджер ресторана.\nЧем могу помочь?",
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: LANG[lang].back, callback_data: "back_main" }]
-          ]
-        }
+            [{ text: "🍽 Забронировать", callback_data: "reserve" }],
+            [{ text: "ℹ️ О ресторане", callback_data: "about" }],
+            [
+              {
+                text: "🛵 Доставка",
+                web_app: { url: process.env.MINIAPP_URL },
+              },
+            ],
+          ],
+        },
       }
     );
   }
+});
 
-  if (data === "back_main") {
-    return bot.sendMessage(chatId, LANG[lang].welcome, {
+// ===== ПРИЁМ ЗАКАЗА ИЗ MINI APP =====
+bot.on("web_app_data", async (msg) => {
+  try {
+    const order = JSON.parse(msg.web_app_data.data);
+
+    let text = "📦 <b>НОВЫЙ ЗАКАЗ</b>\n\n";
+
+    order.items.forEach((item) => {
+      text += `• ${item.name} — ${item.price} сум\n`;
+    });
+
+    text += `\n💰 <b>Итого:</b> ${order.total} сум`;
+    text += `\n📍 <b>Тип:</b> ${order.delivery}`;
+    text += `\n👤 <b>Имя:</b> ${order.name}`;
+    text += `\n📞 <b>Тел:</b> ${order.phone}`;
+
+    await bot.sendMessage(ADMIN_CHAT_ID, text, {
+      parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
-          [{ text: LANG[lang].book, callback_data: "book" }],
-          [{ text: LANG[lang].delivery, web_app: { url: process.env.MINIAPP_URL } }],
-          [{ text: LANG[lang].about, callback_data: "about" }]
-        ]
-      }
+          [
+            { text: "✅ Принять", callback_data: "order_accept" },
+            { text: "❌ Отклонить", callback_data: "order_decline" },
+          ],
+        ],
+      },
     });
+
+    bot.sendMessage(msg.chat.id, "✅ Заказ отправлен менеджеру!");
+
+  } catch (err) {
+    console.error("Ошибка web_app_data:", err);
   }
 });
 
-// ================== TEXT STEPS ==================
-bot.on("message", (msg) => {
-  const chatId = msg.chat.id;
-  if (!users[chatId] || !users[chatId].step) return;
-
-  const lang = users[chatId].lang || "ru";
-
-  if (users[chatId].step === "date") {
-    users[chatId].date = msg.text;
-    users[chatId].step = "name";
-    return bot.sendMessage(chatId, LANG[lang].name);
+// ===== КНОПКИ АДМИНА =====
+bot.on("callback_query", (q) => {
+  if (q.data === "order_accept") {
+    bot.sendMessage(q.message.chat.id, "✅ Заказ принят");
   }
 
-  if (users[chatId].step === "name") {
-    users[chatId].name = msg.text;
-    users[chatId].step = "phone";
-    return bot.sendMessage(chatId, LANG[lang].phone);
-  }
-
-  if (users[chatId].step === "phone") {
-    users[chatId].phone = msg.text;
-    users[chatId].step = null;
-
-    const text =
-`📩 НОВАЯ БРОНЬ
-🏢 Этаж: ${users[chatId].floor}
-🍽 Стол: ${users[chatId].table}
-📅 Дата: ${users[chatId].date}
-👤 Имя: ${users[chatId].name}
-📞 Телефон: ${users[chatId].phone}`;
-
-    // 👉 УВЕДОМЛЕНИЕ В ОБЩИЙ ЧАТ АДМИНОВ
-    bot.sendMessage(ADMIN_CHAT_ID, text);
-
-    return bot.sendMessage(chatId, LANG[lang].done);
+  if (q.data === "order_decline") {
+    bot.sendMessage(q.message.chat.id, "❌ Заказ отклонён");
   }
 });
 
-console.log("🤖 Bot started successfully");
+console.log("🤖 Бот запущен");
