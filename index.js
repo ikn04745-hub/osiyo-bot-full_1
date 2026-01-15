@@ -95,3 +95,4 @@ bot.on("callback_query", (q) => {
 });
 
 console.log("🤖 Бот запущен");
+require("./server");
