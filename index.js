@@ -5,94 +5,49 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
 
 const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
 
-// ===== /start =====
+// /start
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "👋 Добро пожаловать!\n\nВыберите язык:",
+    "👋 Добро пожаловать!\n\nНажмите кнопку ниже, чтобы сделать заказ 👇",
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "🇷🇺 Русский", callback_data: "lang_ru" }],
-          [{ text: "🇺🇿 O‘zbekcha", callback_data: "lang_uz" }],
-          [{ text: "🇬🇧 English", callback_data: "lang_en" }],
-        ],
-      },
+          [
+            {
+              text: "🍽 Сделать заказ",
+              web_app: { url: process.env.MINIAPP_URL }
+            }
+          ]
+        ]
+      }
     }
   );
 });
 
-// ===== язык =====
-bot.on("callback_query", (q) => {
-  const chatId = q.message.chat.id;
+// Получение заказа из Mini App
+bot.on("message", (msg) => {
+  if (!msg.web_app_data) return;
 
-  if (q.data.startsWith("lang_")) {
-    bot.sendMessage(
-      chatId,
-      "🤖 Я менеджер ресторана.\nЧем могу помочь?",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "🍽 Забронировать", callback_data: "reserve" }],
-            [{ text: "ℹ️ О ресторане", callback_data: "about" }],
-            [
-              {
-                text: "🛵 Доставка",
-                web_app: { url: process.env.MINIAPP_URL },
-              },
-            ],
-          ],
-        },
-      }
-    );
-  }
-});
-
-// ===== ПРИЁМ ЗАКАЗА ИЗ MINI APP =====
-bot.on("web_app_data", async (msg) => {
+  let order;
   try {
-    const order = JSON.parse(msg.web_app_data.data);
-
-    let text = "📦 <b>НОВЫЙ ЗАКАЗ</b>\n\n";
-
-    order.items.forEach((item) => {
-      text += `• ${item.name} — ${item.price} сум\n`;
-    });
-
-    text += `\n💰 <b>Итого:</b> ${order.total} сум`;
-    text += `\n📍 <b>Тип:</b> ${order.delivery}`;
-    text += `\n👤 <b>Имя:</b> ${order.name}`;
-    text += `\n📞 <b>Тел:</b> ${order.phone}`;
-
-    await bot.sendMessage(ADMIN_CHAT_ID, text, {
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✅ Принять", callback_data: "order_accept" },
-            { text: "❌ Отклонить", callback_data: "order_decline" },
-          ],
-        ],
-      },
-    });
-
-    bot.sendMessage(msg.chat.id, "✅ Заказ отправлен менеджеру!");
-
-  } catch (err) {
-    console.error("Ошибка web_app_data:", err);
+    order = JSON.parse(msg.web_app_data.data);
+  } catch {
+    return;
   }
+
+  let text = `📦 <b>Новый заказ</b>\n\n`;
+
+  order.items.forEach((item) => {
+    text += `• ${item.name} — ${item.price} сум\n`;
+  });
+
+  text += `\n💰 <b>Итого:</b> ${order.total} сум`;
+  text += `\n🚚 <b>Тип:</b> ${order.delivery}`;
+  text += `\n👤 <b>Имя:</b> ${order.name}`;
+  text += `\n📞 <b>Телефон:</b> ${order.phone}`;
+
+  bot.sendMessage(ADMIN_CHAT_ID, text, { parse_mode: "HTML" });
 });
 
-// ===== КНОПКИ АДМИНА =====
-bot.on("callback_query", (q) => {
-  if (q.data === "order_accept") {
-    bot.sendMessage(q.message.chat.id, "✅ Заказ принят");
-  }
-
-  if (q.data === "order_decline") {
-    bot.sendMessage(q.message.chat.id, "❌ Заказ отклонён");
-  }
-});
-
-console.log("🤖 Бот запущен");
-require("./server");
+console.log("🤖 Bot is running");
